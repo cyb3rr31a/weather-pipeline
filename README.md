@@ -52,7 +52,7 @@ Then open `.env` and add your API key and city:
 
 ```
 API_KEY=your_api_key_here
-CITY=London
+CITY=your_city_here
 ```
 
 ### 5. Run the pipeline
