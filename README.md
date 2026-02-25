@@ -10,6 +10,8 @@ A Python script that extracts weather data from the OpenWeatherMap API, transfor
 Gets the job done, but has no visibility — if it fails silently you won't know until you check the database manually.
 
 ### v2 — Airflow
+
+![Airflow DAG](v2_airflow/dag.png)
 The same ETL logic rebuilt as an Apache Airflow DAG. Each step (extract, transform, load) is a separate task with its own logs, retry logic, and status tracking. The pipeline is monitored through a web UI and retries automatically if the API call fails.
 
 | Feature | v1 Task Scheduler | v2 Airflow |
