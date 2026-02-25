@@ -1,2 +1,5 @@
 .env
 weather.db
+venv/
+airflow-env/
+__pycache__/
