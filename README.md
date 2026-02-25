@@ -1,14 +1,37 @@
-# Weather Data Pipeline
+# Weather Pipeline
 
-A simple ETL pipeline that collects weather data from the OpenWeatherMap API and stores it in a local SQLite database. Designed to run daily on a schedule.
+A daily weather ETL pipeline built in two versions, showing the evolution from a simple scheduled script to a production-style orchestrated pipeline.
 
-## What it does
+## The evolution
 
-- **Extracts** current weather data from the OpenWeatherMap API
-- **Transforms** the raw response into a clean, structured format
-- **Loads** the data into a local SQLite database
+### v1 — Task Scheduler
+A Python script that extracts weather data from the OpenWeatherMap API, transforms it, and loads it into a SQLite database. Scheduled to run daily using Windows Task Scheduler.
 
-Each day a new row is added, building up a historical record of weather data over time.
+Gets the job done, but has no visibility — if it fails silently you won't know until you check the database manually.
+
+### v2 — Airflow
+The same ETL logic rebuilt as an Apache Airflow DAG. Each step (extract, transform, load) is a separate task with its own logs, retry logic, and status tracking. The pipeline is monitored through a web UI and retries automatically if the API call fails.
+
+| Feature | v1 Task Scheduler | v2 Airflow |
+|---|---|---|
+| Scheduling | ✅ | ✅ |
+| Visual pipeline UI | ❌ | ✅ |
+| Per-task logs | ❌ | ✅ |
+| Automatic retries | ❌ | ✅ |
+| Run history | ❌ | ✅ |
+| Rerun a single failed task | ❌ | ✅ |
+
+## Pipeline structure
+
+Both versions follow the same ETL pattern:
+
+```
+extract → transform → load
+```
+
+- **extract** — calls the OpenWeatherMap API and retrieves current weather
+- **transform** — pulls out temperature, humidity, feels like, and description, adds a timestamp
+- **load** — inserts the cleaned row into SQLite
 
 ## Data collected
 
@@ -21,7 +44,29 @@ Each day a new row is added, building up a historical record of weather data ove
 | description | Weather description (e.g. "light rain") |
 | timestamp | Date and time the data was collected |
 
+## Project structure
+
+```
+weather-pipeline/
+├── v1_task_scheduler/
+│   ├── weather_pipeline.py   # Original ETL script
+│   ├── .env.example          # Environment variable template
+│   └── requirements.txt      # Python dependencies
+├── v2_airflow/
+│   ├── weather_dag.py        # Airflow DAG
+│   └── .env.example          # Environment variable template
+├── .env.example              # Root level template
+├── .gitignore
+└── README.md
+```
+
 ## Setup
+
+### Prerequisites
+
+- Python 3.10+
+- A free OpenWeatherMap API key from [openweathermap.org](https://openweathermap.org)
+- For v2: WSL2 with Ubuntu (Windows users) or any Linux/Mac environment
 
 ### 1. Clone the repository
 
@@ -30,73 +75,78 @@ git clone https://github.com/your-username/weather-pipeline.git
 cd weather-pipeline
 ```
 
-### 2. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Get a free API key
-
-Sign up at [openweathermap.org](https://openweathermap.org) and copy your API key from the **API Keys** section of your account.
-
-### 4. Create your `.env` file
-
-Copy the example file and fill in your values:
+### 2. Create your `.env` file
 
 ```bash
 cp .env.example .env
 ```
 
-Then open `.env` and add your API key and city:
+Fill in your API key and city:
 
 ```
-API_KEY=your_api_key_here
-CITY=your_city_here
+API_KEY=your_openweathermap_api_key
+CITY=London
 ```
 
-### 5. Run the pipeline
+---
+
+### Running v1 — Task Scheduler
 
 ```bash
+cd v1_task_scheduler
+pip install -r requirements.txt
 python weather_pipeline.py
 ```
 
-You should see:
+To schedule it, open Windows Task Scheduler and point it at `weather_pipeline.py` to run daily.
+
+---
+
+### Running v2 — Airflow
+
+Install Airflow:
+
+```bash
+pip install "apache-airflow==2.8.1" --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.8.1/constraints-3.10.txt"
+pip install requests python-dotenv
 ```
-Data extracted for London.
-Data transformed.
-Data loaded into database.
-Pipeline completed successfully.
+
+Initialize and create an admin user:
+
+```bash
+export AIRFLOW_HOME=~/airflow
+airflow db init
+
+airflow users create \
+    --username admin \
+    --firstname admin \
+    --lastname admin \
+    --role Admin \
+    --email admin@example.com \
+    --password admin
 ```
 
-A `weather.db` file will be created in your project folder containing your data.
+Copy the DAG into Airflow's dags folder:
 
-## Scheduling (Windows)
-
-To run the pipeline automatically every day using Task Scheduler:
-
-1. Open **Task Scheduler** and click **Create Basic Task**
-2. Set the trigger to **Daily** at your preferred time
-3. Set the action to **Start a program**
-   - Program: path to your Python executable (run `where python` to find it)
-   - Arguments: `weather_pipeline.py`
-   - Start in: path to your project folder
-4. Save and right-click the task to **Run** it immediately as a test
-
-## Project structure
-
+```bash
+cp v2_airflow/weather_dag.py ~/airflow/dags/
 ```
-weather-pipeline/
-├── weather_pipeline.py  # Main ETL script
-├── .env                 # Your API key and city (not tracked by Git)
-├── .env.example         # Template for .env
-├── .gitignore           # Tells Git to ignore .env and weather.db
-├── requirements.txt     # Python dependencies
-└── README.md            # This file
+
+Start Airflow in two terminal windows:
+
+```bash
+# Terminal 1
+airflow webserver --port 8080
+
+# Terminal 2
+airflow scheduler
 ```
+
+Open `http://localhost:8080`, log in with `admin` / `admin`, enable the `weather_pipeline` DAG, and trigger a run with the ▶ button.
 
 ## Dependencies
 
-- `requests` — for calling the API
-- `python-dotenv` — for loading environment variables from `.env`
+- `requests` — calling the OpenWeatherMap API
+- `python-dotenv` — loading environment variables
+- `apache-airflow` — pipeline orchestration (v2 only)
 - `sqlite3` — built into Python, no install needed
